@@ -1,4 +1,4 @@
-![Showcase Card](./card-preview.png)
+![Showcase Card](./card_preview.png)
 
 <div align="center">
 
