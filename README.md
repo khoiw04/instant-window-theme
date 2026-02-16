@@ -26,14 +26,12 @@ This is a list of the various technologies used to build this theme:
 | Decoration | [**tacky-border**](https://github.com/lukeyou05/tacky-borders) |
 | Decoration | [**AutoHotkey**](https://www.autohotkey.com/) |
 
-> [!NOTE]
-> This site was previously built using [**Next.js**](https://nextjs.org) via the [**timlrx/tailwind-nextjs-starter-blog**](https://github.com/timlrx/tailwind-nextjs-starter-blog). If you wish to reference the codebase or utilize its components at that point (previously licensed via [**Apache 2.0**](https://github.com/jktrn/enscribe.dev/blob/ddda783b21d5d49783f4d98e9b06676af8f95031/LICENSE)), utilize the [**v2.3.0**](https://github.com/jktrn/enscribe.dev/releases/tag/v2.3.0) release or browse the tree at [**`ddda783`**](https://github.com/jktrn/enscribe.dev/tree/ddda783b21d5d49783f4d98e9b06676af8f95031).
-
 ---
 
 <div align="center">
 
 Made with ♥ by [Khoi](https://blog.khoiwn04.com/en)!
+
 Readme.md is Inspired by [enscribe.dev](https://github.com/jktrn/enscribe.dev/)
 
 </div>
