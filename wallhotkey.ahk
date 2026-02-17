@@ -29,12 +29,11 @@ Config["OSD_Size"] := 350
 Config["OSD_Y"] := 80
 Config["OSD_Hold_Time"] := 150
 
-; --- HOTKEYS ---
-Config["Key_Indi"] := "^!#i"   ; Win + Ctrl + Alt + I
-Config["Key_Next"] := "^'"     ; Ctrl + '
-Config["Key_Prev"] := "^+'"    ; Ctrl + Shift + '
-Config["Key_Random"] := "^!r"  ; Ctrl + Alt + R
-Config["Key_Dual"] := "^!d"    ; Ctrl + Alt + D
+Config["Key_Indi"] := "^!#i"
+Config["Key_Next"] := "^'"
+Config["Key_Prev"] := "^+'"
+Config["Key_Random"] := "^!r"
+Config["Key_Dual"] := "^!d"
 
 global files := []
 fileStr := ""
@@ -63,12 +62,9 @@ global indicatorState := 1
 global targetPath := ""
 global targetPath2 := ""
 global targetIsDual := false
-global myGui := ""
+global g_OSD := ""
 
-; --- MEMORY CACHE (Global variables to store last applied state) ---
-global cache_R := -1
-global cache_G := -1
-global cache_B := -1
+global cache_BGR := -1
 global cache_Size := -1
 global cache_Type := -1
 
@@ -161,7 +157,6 @@ BackgroundWork() {
         UpdateLockScreen_File(targetPath)
     }
     if (Config["Sync_Accent"]) {
-        ; Trigger sync checks
         SetTimer(SyncColor_Smart, -500)
         SetTimer(SyncColor_Smart, -1500)
         SetTimer(SyncColor_Smart, -3000)
@@ -231,72 +226,59 @@ UpdateLockScreen_File(srcPath) {
 }
 
 SyncColor_Smart() {
-    global indicatorState, cache_R, cache_G, cache_B, cache_Size, cache_Type
+    global indicatorState, cache_BGR, cache_Size, cache_Type
     try {
-        dwmMime := RegRead("HKEY_CURRENT_USER\Software\Microsoft\Windows\DWM", "AccentColor")
-        cleanBGR := Integer(dwmMime & 0xFFFFFF)
-        blue := (cleanBGR >> 16) & 0xFF
-        green := (cleanBGR >> 8) & 0xFF
-        red := cleanBGR & 0xFF
+        rawDwm := RegRead("HKEY_CURRENT_USER\Software\Microsoft\Windows\DWM", "AccentColor")
+        pureBGR := Integer(rawDwm & 0xFFFFFF)
 
-        ; === SMART CACHE CHECK (THE FIX) ===
-        ; If color has NOT changed, do NOT proceed. Saves CPU.
-        if (red == cache_R && green == cache_G && blue == cache_B) {
-            ; Color is same. Now check if Indicator state matches cache
+        if (pureBGR == cache_BGR) {
             mode := Integer(indicatorState)
             targetSize := (mode == 2) ? 5 : 1
             targetType := (mode == 0) ? 0 : 1
-
             if (targetSize == cache_Size && targetType == cache_Type) {
-                return ; EVERYTHING IS SAME -> STOP EXECUTION IMMEDIATELY
+                return
             }
         }
 
-        ; If we are here, something changed. Update Cache.
-        cache_R := red
-        cache_G := green
-        cache_B := blue
+        cache_BGR := pureBGR
 
+        blue := (pureBGR >> 16) & 0xFF
+        green := (pureBGR >> 8) & 0xFF
+        red := pureBGR & 0xFF
         rgbStr := red . " " . green . " " . blue
 
         RegWrite(rgbStr, "REG_SZ", "HKEY_CURRENT_USER\Control Panel\Colors", "Hilight")
         RegWrite("255 255 255", "REG_SZ", "HKEY_CURRENT_USER\Control Panel\Colors", "HilightText")
         RegWrite(rgbStr, "REG_SZ", "HKEY_CURRENT_USER\Control Panel\Colors", "HotTrackingColor")
         RegWrite(rgbStr, "REG_SZ", "HKEY_CURRENT_USER\Control Panel\Colors", "MenuHilight")
-        RegWrite(rgbStr, "REG_SZ", "HKEY_CURRENT_USER\Control Panel\Colors", "ActiveBorder")
 
-        RegWrite(dwmMime, "REG_DWORD", "HKEY_CURRENT_USER\Software\Microsoft\Windows\DWM", "AccentColorMenu")
-        RegWrite(dwmMime, "REG_DWORD", "HKEY_CURRENT_USER\Software\Microsoft\Windows\DWM", "ColorizationColor")
-
-        elements := Buffer(20, 0)
+        elements := Buffer(16, 0)
         NumPut("Int", 13, elements, 0)
         NumPut("Int", 26, elements, 4)
         NumPut("Int", 29, elements, 8)
         NumPut("Int", 10, elements, 12)
-        NumPut("Int", 6, elements, 16)
 
-        colors := Buffer(20, 0)
-        NumPut("UInt", cleanBGR, colors, 0)
-        NumPut("UInt", cleanBGR, colors, 4)
-        NumPut("UInt", cleanBGR, colors, 8)
-        NumPut("UInt", cleanBGR, colors, 12)
-        NumPut("UInt", cleanBGR, colors, 16)
+        colors := Buffer(16, 0)
+        NumPut("UInt", pureBGR, colors, 0)
+        NumPut("UInt", pureBGR, colors, 4)
+        NumPut("UInt", pureBGR, colors, 8)
+        NumPut("UInt", pureBGR, colors, 12)
 
-        DllCall("user32\SetSysColors", "Int", 5, "Ptr", elements.Ptr, "Ptr", colors.Ptr)
+        DllCall("user32\SetSysColors", "Int", 4, "Ptr", elements.Ptr, "Ptr", colors.Ptr)
 
-        ApplyIndicatorStrict(red, green, blue)
+        fullAlphaColor := (0xFF << 24) | pureBGR
+        ApplyIndicatorStrict(fullAlphaColor)
     } catch {
     }
 }
 
-ApplyIndicatorStrict(r, g, b) {
+ApplyIndicatorStrict(colorValue) {
     global indicatorState, cache_Size, cache_Type
     cPath := "HKEY_CURRENT_USER\Software\Microsoft\Accessibility\CursorIndicator"
     mode := Integer(indicatorState)
 
-    ; === OFF MODE ===
     if (mode == 0) {
-        if (cache_Type != 0) { ; Only write if memory says it's not 0
+        if (cache_Type != 0) {
              try {
                 RegWrite(0, "REG_DWORD", cPath, "IndicatorType")
                 RefreshIndicator()
@@ -307,28 +289,16 @@ ApplyIndicatorStrict(r, g, b) {
         return
     }
 
-    brightness := (r * 299 + g * 587 + b * 114) / 1000
-    br := r
-    bg := g
-    bb := b
-    if (brightness < 120) {
-        br := Min(255, Integer(r * 1.6))
-        bg := Min(255, Integer(g * 1.6))
-        bb := Min(255, Integer(b * 1.6))
-    }
-    bColor := (0xFF << 24) | (bb << 16) | (bg << 8) | br
     tSize := (mode == 2) ? 5 : 1
 
     changed := false
-
-    ; Write to registry only if needed (Double check with RegRead for safety)
     try {
         if (RegRead(cPath, "IndicatorSize", -1) != tSize) {
             RegWrite(tSize, "REG_DWORD", cPath, "IndicatorSize")
             changed := true
         }
-        if (RegRead(cPath, "IndicatorColor", 0) != bColor) {
-            RegWrite(bColor, "REG_DWORD", cPath, "IndicatorColor")
+        if (RegRead(cPath, "IndicatorColor", 0) != colorValue) {
+            RegWrite(colorValue, "REG_DWORD", cPath, "IndicatorColor")
             changed := true
         }
         if (RegRead(cPath, "IndicatorType", -1) != 1) {
@@ -342,7 +312,6 @@ ApplyIndicatorStrict(r, g, b) {
         RefreshIndicator()
     }
 
-    ; Update Cache
     cache_Size := tSize
     cache_Type := 1
 }
@@ -394,11 +363,8 @@ ToggleIndicator() {
     indicatorState := (indicatorState + 1 > 2) ? 0 : indicatorState + 1
     SaveSettings()
 
-    ; Reset cache to force update immediately
-    global cache_R, cache_G, cache_B
-    cache_R := -1
-    cache_G := -1
-    cache_B := -1
+    global cache_BGR
+    cache_BGR := -1
 
     SetTimer(SyncColor_Smart, 10)
 
@@ -408,30 +374,42 @@ ToggleIndicator() {
 }
 
 ShowOSD_New(imgPath, textStr) {
-    global myGui, Config
-    if (myGui) {
-        myGui.Destroy()
+    global g_OSD, Config
+
+    SetTimer(HideOSD, 0)
+
+    if (IsSet(g_OSD) && g_OSD) {
+        try g_OSD.Destroy()
+        g_OSD := ""
     }
-    myGui := Gui("+AlwaysOnTop -Caption +ToolWindow +Owner +E0x20 +E0x02000000")
-    myGui.BackColor := "1F1F1F"
-    myGui.SetFont("s10 cE0E0E0", "Segoe UI")
+
+    g_OSD := Gui("+AlwaysOnTop -Caption +ToolWindow +Owner +E0x20 +E0x02000000")
+    g_OSD.BackColor := "1F1F1F"
+    g_OSD.SetFont("s10 cE0E0E0", "Segoe UI")
+
     if (imgPath != "" && FileExist(imgPath)) {
         try {
-            myGui.Add("Picture", "w" Config["OSD_Size"] " h-1 +Border BackgroundTrans", imgPath)
+            g_OSD.Add("Picture", "w" Config["OSD_Size"] " h-1 +Border BackgroundTrans", imgPath)
         } catch {
         }
     }
-    myGui.Add("Text", "Center w" Config["OSD_Size"] " y+8 BackgroundTrans", textStr)
-    myGui.Show("NoActivate AutoSize Hide")
-    myGui.GetPos(,, &w, &h)
-    myGui.Show("x" (A_ScreenWidth - w) / 2 " y" Config["OSD_Y"] " NoActivate")
-    WinSetTransparent(230, myGui.Hwnd)
+
+    if (IsObject(g_OSD)) {
+        try {
+            g_OSD.Add("Text", "Center w" Config["OSD_Size"] " y+8 BackgroundTrans", textStr)
+            g_OSD.Show("NoActivate AutoSize Hide")
+            g_OSD.GetPos(,, &w, &h)
+            g_OSD.Show("x" (A_ScreenWidth - w) / 2 " y" Config["OSD_Y"] " NoActivate")
+            WinSetTransparent(230, g_OSD.Hwnd)
+        } catch {
+        }
+    }
 }
 
 HideOSD() {
-    global myGui
-    if (myGui) {
-        myGui.Destroy()
-        myGui := ""
+    global g_OSD
+    if (IsSet(g_OSD) && g_OSD) {
+        try g_OSD.Destroy()
+        g_OSD := ""
     }
 }
