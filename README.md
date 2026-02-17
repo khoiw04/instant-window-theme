@@ -20,6 +20,7 @@ This is a list of the various technologies used to build this theme:
 | Core       | [**Zed Editor**](https://zed.dev/) |
 | Core       | [**GlazeWM**](https://github.com/glzr-io/glazewm) |
 | Core       | [**Flow Launcher**](https://flowlauncher.com/) |
+| Core       | [**FxSound**](https://www.fxsound.com/) |
 | Decoration | [**MicaForEveryone**](https://github.com/MicaForEveryone/MicaForEveryone) |
 | Decoration | [**F.lux**](https://justgetflux.com/) |
 | Decoration | [**TranslucentTB**](https://apps.microsoft.com/detail/9pf4kz2vn4w9) |
