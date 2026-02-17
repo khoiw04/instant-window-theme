@@ -14,7 +14,7 @@ if not A_IsAdmin {
 }
 
 global Config := Map()
-Config["Folder"] := "C:\Users\HiuKhoi\Pictures\Wallpapers"
+Config["Folder"] := "C:\Users\khoiw04\Pictures\Wallpapers"
 AppDataDir := A_AppData "\WallHotkey"
 if !DirExist(AppDataDir) {
     DirCreate(AppDataDir)
@@ -413,3 +413,4 @@ HideOSD() {
         g_OSD := ""
     }
 }
+
