@@ -13,8 +13,12 @@ if not A_IsAdmin {
     ExitApp
 }
 
+try {
+    DllCall("SetThreadDpiAwarenessContext", "ptr", -3)
+}
+
 global Config := Map()
-Config["Folder"] := "C:\Users\khoiw04\Pictures\Wallpapers"
+Config["Folder"] := "C:\Users\HiuKhoi\Pictures\Wallpapers"
 AppDataDir := A_AppData "\WallHotkey"
 if !DirExist(AppDataDir) {
     DirCreate(AppDataDir)
@@ -251,20 +255,23 @@ SyncColor_Smart() {
         RegWrite("255 255 255", "REG_SZ", "HKEY_CURRENT_USER\Control Panel\Colors", "HilightText")
         RegWrite(rgbStr, "REG_SZ", "HKEY_CURRENT_USER\Control Panel\Colors", "HotTrackingColor")
         RegWrite(rgbStr, "REG_SZ", "HKEY_CURRENT_USER\Control Panel\Colors", "MenuHilight")
+        RegWrite(rgbStr, "REG_SZ", "HKEY_CURRENT_USER\Control Panel\Colors", "ActiveBorder")
 
-        elements := Buffer(16, 0)
+        elements := Buffer(20, 0)
         NumPut("Int", 13, elements, 0)
         NumPut("Int", 26, elements, 4)
         NumPut("Int", 29, elements, 8)
         NumPut("Int", 10, elements, 12)
+        NumPut("Int", 6, elements, 16)
 
-        colors := Buffer(16, 0)
+        colors := Buffer(20, 0)
         NumPut("UInt", pureBGR, colors, 0)
         NumPut("UInt", pureBGR, colors, 4)
         NumPut("UInt", pureBGR, colors, 8)
         NumPut("UInt", pureBGR, colors, 12)
+        NumPut("UInt", pureBGR, colors, 16)
 
-        DllCall("user32\SetSysColors", "Int", 4, "Ptr", elements.Ptr, "Ptr", colors.Ptr)
+        DllCall("user32\SetSysColors", "Int", 5, "Ptr", elements.Ptr, "Ptr", colors.Ptr)
 
         fullAlphaColor := (0xFF << 24) | pureBGR
         ApplyIndicatorStrict(fullAlphaColor)
@@ -397,9 +404,7 @@ ShowOSD_New(imgPath, textStr) {
     if (IsObject(g_OSD)) {
         try {
             g_OSD.Add("Text", "Center w" Config["OSD_Size"] " y+8 BackgroundTrans", textStr)
-            g_OSD.Show("NoActivate AutoSize Hide")
-            g_OSD.GetPos(,, &w, &h)
-            g_OSD.Show("x" (A_ScreenWidth - w) / 2 " y" Config["OSD_Y"] " NoActivate")
+            g_OSD.Show("NoActivate AutoSize xCenter y" Config["OSD_Y"])
             WinSetTransparent(230, g_OSD.Hwnd)
         } catch {
         }
@@ -413,4 +418,3 @@ HideOSD() {
         g_OSD := ""
     }
 }
-
