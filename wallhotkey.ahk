@@ -27,6 +27,10 @@ Config["IniFile"] := AppDataDir "\wall_settings.ini"
 Config["SpanTemp"] := A_Temp "\ahk_span_safe.jpg"
 Config["LockTemp"] := A_Temp "\ahk_lock_safe.jpg"
 Config["PsScript"] := A_Temp "\ahk_worker.ps1"
+
+; --- CẤU HÌNH YASB ---
+Config["YASB_CSS"] := "C:\Users\HiuKhoi\.config\yasb\styles.css"
+
 Config["Change_LockScreen"] := true
 Config["Sync_Accent"] := true
 Config["OSD_Size"] := 350
@@ -34,7 +38,6 @@ Config["OSD_Y"] := 80
 Config["OSD_Hold_Time"] := 150
 
 Config["Restart_App"] := "C:\Users\HiuKhoi\AppData\Local\FlowLauncher\Flow.Launcher.exe"
-; ------------------------------------------------------------------
 
 Config["Key_Indi"] := "^!#i"
 Config["Key_Next"] := "^'"
@@ -169,11 +172,9 @@ BackgroundWork() {
         SetTimer(SyncColor_Smart, -3000)
     }
 
-    ; --- [LOGIC MỚI] Gọi hàm restart app ---
     if (Config["Restart_App"] != "") {
-        SetTimer(RestartTargetApp, -800) ; Chạy sau 0.8s để đảm bảo màu đã đổi xong
+        SetTimer(RestartTargetApp, -800)
     }
-    ; ---------------------------------------
 
     SaveSettings()
     SetTimer(HideOSD, -Config["OSD_Hold_Time"])
@@ -187,6 +188,86 @@ SaveSettings() {
         IniWrite(isRandom ? 1 : 0, Config["IniFile"], "State", "Random")
         IniWrite(isDual ? 1 : 0, Config["IniFile"], "State", "Dual")
         IniWrite(indicatorState, Config["IniFile"], "State", "IndicatorState")
+    } catch {
+    }
+}
+
+SyncColor_Smart() {
+    global indicatorState, cache_BGR, cache_Size, cache_Type
+    try {
+        rawDwm := RegRead("HKEY_CURRENT_USER\Software\Microsoft\Windows\DWM", "AccentColor")
+        pureBGR := Integer(rawDwm & 0xFFFFFF)
+
+        if (pureBGR == cache_BGR) {
+            mode := Integer(indicatorState)
+            targetSize := (mode == 2) ? 5 : 1
+            targetType := (mode == 0) ? 0 : 1
+            if (targetSize == cache_Size && targetType == cache_Type) {
+                return
+            }
+        }
+
+        cache_BGR := pureBGR
+
+        blue := (pureBGR >> 16) & 0xFF
+        green := (pureBGR >> 8) & 0xFF
+        red := pureBGR & 0xFF
+        rgbStr := red . " " . green . " " . blue
+
+        ; --- CẬP NHẬT CSS CHO YASB ---
+        UpdateYASB_CSS(red, green, blue)
+
+        RegWrite(rgbStr, "REG_SZ", "HKEY_CURRENT_USER\Control Panel\Colors", "Hilight")
+        RegWrite("255 255 255", "REG_SZ", "HKEY_CURRENT_USER\Control Panel\Colors", "HilightText")
+        RegWrite(rgbStr, "REG_SZ", "HKEY_CURRENT_USER\Control Panel\Colors", "HotTrackingColor")
+        RegWrite(rgbStr, "REG_SZ", "HKEY_CURRENT_USER\Control Panel\Colors", "MenuHilight")
+        RegWrite(rgbStr, "REG_SZ", "HKEY_CURRENT_USER\Control Panel\Colors", "ActiveBorder")
+
+        elements := Buffer(20, 0)
+        NumPut("Int", 13, elements, 0)
+        NumPut("Int", 26, elements, 4)
+        NumPut("Int", 29, elements, 8)
+        NumPut("Int", 10, elements, 12)
+        NumPut("Int", 6, elements, 16)
+
+        colors := Buffer(20, 0)
+        NumPut("UInt", pureBGR, colors, 0)
+        NumPut("UInt", pureBGR, colors, 4)
+        NumPut("UInt", pureBGR, colors, 8)
+        NumPut("UInt", pureBGR, colors, 12)
+        NumPut("UInt", pureBGR, colors, 16)
+
+        DllCall("user32\SetSysColors", "Int", 5, "Ptr", elements.Ptr, "Ptr", colors.Ptr)
+
+        fullAlphaColor := (0xFF << 24) | pureBGR
+        ApplyIndicatorStrict(fullAlphaColor)
+    } catch {
+    }
+}
+
+UpdateYASB_CSS(r, g, b) {
+    global Config
+    cssPath := Config["YASB_CSS"]
+    if !FileExist(cssPath)
+        return
+
+    ; Mix màu (Tỉ lệ % có thể điều chỉnh tùy sở thích)
+    bg_r := Round(r * 0.12), bg_g := Round(g * 0.12), bg_b := Round(b * 0.12) ; Nền rất tối
+    fg_r := Round(r * 0.2 + 204), fg_g := Round(g * 0.2 + 204), fg_b := Round(b * 0.2 + 204) ; Chữ sáng
+    bd_r := Round(r * 0.4), bd_g := Round(g * 0.4), bd_b := Round(b * 0.4) ; Viền tối vừa
+    ua_r := Round(r * 0.4 + 77), ua_g := Round(g * 0.4 + 77), ua_b := Round(b * 0.4 + 77) ; Unactive xám-accent
+
+    try {
+        cssText := FileRead(cssPath)
+        cssText := RegExReplace(cssText, "(--background-color:\s*)rgba\([^)]+\)", "$1rgba(" bg_r ", " bg_g ", " bg_b ", 0.7)")
+        cssText := RegExReplace(cssText, "(--foreground-color:\s*)rgb\([^)]+\)", "$1rgb(" fg_r ", " fg_g ", " fg_b ")")
+        cssText := RegExReplace(cssText, "(--border-color:\s*)rgb\([^)]+\)", "$1rgb(" bd_r ", " bd_g ", " bd_b ")")
+        cssText := RegExReplace(cssText, "(--accent-color:\s*)rgb\([^)]+\)", "$1rgb(" r ", " g ", " b ")")
+        cssText := RegExReplace(cssText, "(--unactive-color:\s*)rgb\([^)]+\)", "$1rgb(" ua_r ", " ua_g ", " ua_b ")")
+
+        fileObj := FileOpen(cssPath, "w")
+        fileObj.Write(cssText)
+        fileObj.Close()
     } catch {
     }
 }
@@ -235,56 +316,6 @@ UpdateLockScreen_File(srcPath) {
     FileAppend(ps, psScript)
     try {
         Run("powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"" psScript "`" -p `"" tempImg "`"", , "Hide")
-    } catch {
-    }
-}
-
-SyncColor_Smart() {
-    global indicatorState, cache_BGR, cache_Size, cache_Type
-    try {
-        rawDwm := RegRead("HKEY_CURRENT_USER\Software\Microsoft\Windows\DWM", "AccentColor")
-        pureBGR := Integer(rawDwm & 0xFFFFFF)
-
-        if (pureBGR == cache_BGR) {
-            mode := Integer(indicatorState)
-            targetSize := (mode == 2) ? 5 : 1
-            targetType := (mode == 0) ? 0 : 1
-            if (targetSize == cache_Size && targetType == cache_Type) {
-                return
-            }
-        }
-
-        cache_BGR := pureBGR
-
-        blue := (pureBGR >> 16) & 0xFF
-        green := (pureBGR >> 8) & 0xFF
-        red := pureBGR & 0xFF
-        rgbStr := red . " " . green . " " . blue
-
-        RegWrite(rgbStr, "REG_SZ", "HKEY_CURRENT_USER\Control Panel\Colors", "Hilight")
-        RegWrite("255 255 255", "REG_SZ", "HKEY_CURRENT_USER\Control Panel\Colors", "HilightText")
-        RegWrite(rgbStr, "REG_SZ", "HKEY_CURRENT_USER\Control Panel\Colors", "HotTrackingColor")
-        RegWrite(rgbStr, "REG_SZ", "HKEY_CURRENT_USER\Control Panel\Colors", "MenuHilight")
-        RegWrite(rgbStr, "REG_SZ", "HKEY_CURRENT_USER\Control Panel\Colors", "ActiveBorder")
-
-        elements := Buffer(20, 0)
-        NumPut("Int", 13, elements, 0)
-        NumPut("Int", 26, elements, 4)
-        NumPut("Int", 29, elements, 8)
-        NumPut("Int", 10, elements, 12)
-        NumPut("Int", 6, elements, 16)
-
-        colors := Buffer(20, 0)
-        NumPut("UInt", pureBGR, colors, 0)
-        NumPut("UInt", pureBGR, colors, 4)
-        NumPut("UInt", pureBGR, colors, 8)
-        NumPut("UInt", pureBGR, colors, 12)
-        NumPut("UInt", pureBGR, colors, 16)
-
-        DllCall("user32\SetSysColors", "Int", 5, "Ptr", elements.Ptr, "Ptr", colors.Ptr)
-
-        fullAlphaColor := (0xFF << 24) | pureBGR
-        ApplyIndicatorStrict(fullAlphaColor)
     } catch {
     }
 }
@@ -392,25 +423,20 @@ ToggleIndicator() {
 
 ShowOSD_New(imgPath, textStr) {
     global g_OSD, Config
-
     SetTimer(HideOSD, 0)
-
     if (IsSet(g_OSD) && g_OSD) {
         try g_OSD.Destroy()
         g_OSD := ""
     }
-
     g_OSD := Gui("+AlwaysOnTop -Caption +ToolWindow +Owner +E0x20 +E0x02000000")
     g_OSD.BackColor := "1F1F1F"
     g_OSD.SetFont("s10 cE0E0E0", "Segoe UI")
-
     if (imgPath != "" && FileExist(imgPath)) {
         try {
             g_OSD.Add("Picture", "w" Config["OSD_Size"] " h-1 +Border BackgroundTrans", imgPath)
         } catch {
         }
     }
-
     if (IsObject(g_OSD)) {
         try {
             g_OSD.Add("Text", "Center w" Config["OSD_Size"] " y+8 BackgroundTrans", textStr)
@@ -429,20 +455,17 @@ HideOSD() {
     }
 }
 
-; --- Hàm khởi động lại ứng dụng ---
 RestartTargetApp() {
     targetApp := Config["Restart_App"]
     if (targetApp == "" || !FileExist(targetApp))
         return
-
     SplitPath(targetApp, &exeName)
-
     try {
         if ProcessExist(exeName) {
             ProcessClose(exeName)
-            Sleep(200) ; Đợi 0.2s để app tắt hẳn
+            Sleep(200)
         }
-        Run(targetApp, , "Hide") ; Chạy lại
+        Run(targetApp, , "Hide")
     } catch {
     }
 }
