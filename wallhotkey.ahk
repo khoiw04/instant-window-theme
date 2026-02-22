@@ -39,6 +39,10 @@ Config["OSD_Hold_Time"] := 150
 
 Config["Restart_App"] := "C:\Users\HiuKhoi\AppData\Local\FlowLauncher\Flow.Launcher.exe"
 
+; --- CẤU HÌNH TACKY BORDERS ---
+Config["Restart_Tacky"] := "C:\Program Files\Tacky Borders\tacky-borders.exe"
+Config["Tacky_Config"] := "C:\Users\HiuKhoi\.config\tacky-borders\config.yaml"
+
 Config["Key_Indi"] := "^!#i"
 Config["Key_Next"] := "^'"
 Config["Key_Prev"] := "^+'"
@@ -176,6 +180,11 @@ BackgroundWork() {
         SetTimer(RestartTargetApp, -800)
     }
 
+    ; --- TACKY BORDERS RESTART ---
+    if (Config["Restart_Tacky"] != "") {
+        SetTimer(RestartTackyBorders, -850)
+    }
+
     SaveSettings()
     SetTimer(HideOSD, -Config["OSD_Hold_Time"])
 }
@@ -217,6 +226,9 @@ SyncColor_Smart() {
         ; --- CẬP NHẬT CSS CHO YASB ---
         UpdateYASB_CSS(red, green, blue)
 
+        ; --- CẬP NHẬT MÀU CHO TACKY BORDERS ---
+        UpdateTackyBorders_Color(red, green, blue)
+
         RegWrite(rgbStr, "REG_SZ", "HKEY_CURRENT_USER\Control Panel\Colors", "Hilight")
         RegWrite("255 255 255", "REG_SZ", "HKEY_CURRENT_USER\Control Panel\Colors", "HilightText")
         RegWrite(rgbStr, "REG_SZ", "HKEY_CURRENT_USER\Control Panel\Colors", "HotTrackingColor")
@@ -251,11 +263,10 @@ UpdateYASB_CSS(r, g, b) {
     if !FileExist(cssPath)
         return
 
-    ; Mix màu (Tỉ lệ % có thể điều chỉnh tùy sở thích)
-    bg_r := Round(r * 0.12), bg_g := Round(g * 0.12), bg_b := Round(b * 0.12) ; Nền rất tối
-    fg_r := Round(r * 0.2 + 204), fg_g := Round(g * 0.2 + 204), fg_b := Round(b * 0.2 + 204) ; Chữ sáng
-    bd_r := Round(r * 0.4), bd_g := Round(g * 0.4), bd_b := Round(b * 0.4) ; Viền tối vừa
-    ua_r := Round(r * 0.4 + 77), ua_g := Round(g * 0.4 + 77), ua_b := Round(b * 0.4 + 77) ; Unactive xám-accent
+    bg_r := Round(r * 0.12), bg_g := Round(g * 0.12), bg_b := Round(b * 0.12)
+    fg_r := Round(r * 0.2 + 204), fg_g := Round(g * 0.2 + 204), fg_b := Round(b * 0.2 + 204)
+    bd_r := Round(r * 0.4), bd_g := Round(g * 0.4), bd_b := Round(b * 0.4)
+    ua_r := Round(r * 0.4 + 77), ua_g := Round(g * 0.4 + 77), ua_b := Round(b * 0.4 + 77)
 
     try {
         cssText := FileRead(cssPath)
@@ -267,6 +278,32 @@ UpdateYASB_CSS(r, g, b) {
 
         fileObj := FileOpen(cssPath, "w")
         fileObj.Write(cssText)
+        fileObj.Close()
+    } catch {
+    }
+}
+
+UpdateTackyBorders_Color(r, g, b) {
+    global Config
+    cfgPath := Config["Tacky_Config"]
+    if !FileExist(cfgPath)
+        return
+
+    ; Tăng độ sáng bằng cách mix 60% màu trắng (có thể chỉnh tỷ lệ 0.4 và 0.6)
+    br_r := Min(255, Round(r * 0.4 + 255 * 0.6))
+    br_g := Min(255, Round(g * 0.4 + 255 * 0.6))
+    br_b := Min(255, Round(b * 0.4 + 255 * 0.6))
+
+    hexColor := Format("#{1:02X}{2:02X}{3:02X}", br_r, br_g, br_b)
+
+    try {
+        cfgText := FileRead(cfgPath)
+
+        ; Chỉ tìm và thay thế nội dung mảng của 'colors:' nằm dưới 'active_color:'
+        cfgText := RegExReplace(cfgText, "(?m)^(\s*active_color:\s*\r?\n\s*colors:\s*)\[.*?\]", "$1[`"" hexColor "`", `"" hexColor "`"]")
+
+        fileObj := FileOpen(cfgPath, "w")
+        fileObj.Write(cfgText)
         fileObj.Close()
     } catch {
     }
@@ -469,3 +506,19 @@ RestartTargetApp() {
     } catch {
     }
 }
+
+RestartTackyBorders() {
+    targetApp := Config["Restart_Tacky"]
+    if (targetApp == "" || !FileExist(targetApp))
+        return
+    SplitPath(targetApp, &exeName)
+    try {
+        if ProcessExist(exeName) {
+            ProcessClose(exeName)
+            Sleep(200)
+        }
+        Run(targetApp, , "Hide")
+    } catch {
+    }
+}
+
